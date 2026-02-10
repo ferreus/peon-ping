@@ -55,7 +55,36 @@ d = json.load(sys.stdin)
 print('EVENT=' + shlex.quote(d.get('hook_event_name', '')))
 print('NTYPE=' + shlex.quote(d.get('notification_type', '')))
 print('CWD=' + shlex.quote(d.get('cwd', '')))
+print('SESSION_ID=' + shlex.quote(d.get('session_id', '')))
+print('PERM_MODE=' + shlex.quote(d.get('permission_mode', '')))
 " <<< "$INPUT" 2>/dev/null)"
+
+# --- Detect agent/teammate sessions (suppress sounds for non-interactive sessions) ---
+# Teammate sessions use permission_mode like "acceptEdits", "delegate", etc.
+# We track these by session_id because Notification events lack permission_mode.
+IS_AGENT=$(/usr/bin/python3 -c "
+import json, os
+state_file = '$STATE'
+session_id = '$SESSION_ID'
+perm_mode = '$PERM_MODE'
+try:
+    state = json.load(open(state_file))
+except:
+    state = {}
+agent_sessions = set(state.get('agent_sessions', []))
+if perm_mode and perm_mode != 'default':
+    agent_sessions.add(session_id)
+    state['agent_sessions'] = list(agent_sessions)
+    os.makedirs(os.path.dirname(state_file) or '.', exist_ok=True)
+    json.dump(state, open(state_file, 'w'))
+    print('true')
+elif session_id in agent_sessions:
+    print('true')
+else:
+    print('false')
+" 2>/dev/null)
+
+[ "$IS_AGENT" = "true" ] && exit 0
 
 PROJECT="${CWD##*/}"
 [ -z "$PROJECT" ] && PROJECT="claude"
